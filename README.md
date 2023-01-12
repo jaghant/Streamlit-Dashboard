@@ -33,5 +33,5 @@ Sales Dashboard: https://www.salesdashboard.pythonandvba.com/
 If you have any feedback, please reach out to me at contact@pythonandvba.com
 
 
-![Logo](https://www.pythonandvba.com/banner-img)
+
 
