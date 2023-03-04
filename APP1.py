@@ -5,10 +5,13 @@ import xlwings as xw  # pip install xlwings
 import streamlit as st # pip install streamlit
 from streamlit_option_menu import option_menu
 import pickle
+import time
+import numpy as np
+import datetime
+from PIL import Image
+from st_aggrid import AgGrid
 
-# import pickle
-# from pathlib import Path
-# import streamlit_authenticator as stauth # pip install streamlit-authenticator
+
 
 st.set_page_config(page_title="My dashboard",
                    page_icon=":dart:",
@@ -19,193 +22,169 @@ st.set_page_config(page_title="My dashboard",
 # -----READ EXCEL ------
 @st.cache             
 def get_data_from_excel():
-            df = pd.read_excel(
-                io='supermarkt_sales.xlsx',
-                engine='openpyxl',
-                sheet_name='Sales',
-                skiprows=3,
-                usecols='B:R',
-                nrows=1000,
+            df         = pd.read_excel(
+            io         = 'supermarkt_sales.xlsx',
+            engine     = 'openpyxl',
+            sheet_name = 'Sales',
+            skiprows   = 3,
+            usecols    = 'B:G',
+            nrows      = 1000,
             )
 
-        # Add 'hour' column to dataframe
+# ------------------------------- Add 'hour' column to dataframe----------------------------------------------------
             df["hour"] = pd.to_datetime(df["Time"], format = "%H:%M:%S").dt.hour
             return df
+    
 df = get_data_from_excel()
 
-        # this_dir = Path(__file__).parent if '__file__' in locals() else Path.cwd()
-        # wb_file_path = this_dir / 'supermarkt_sales.xlsx'
+   
 
-        # wb = xw.Book(wb_file_path)
-        # sht = wb.sheets['Sales']
-        # rng = sht.range('B4:R1004')
+# ----------------------------------------------- SIDEBAR -----------------------------------------------
+st.title("🎥 People Counting Dashboard")
+with st.sidebar:
+     image = Image.open('logo.png')
+     st.image(image,  width = 200)
+# st.sidebar.title("🎥 PCD")
 
-        #df = rng.options(pd.DataFrame, index=False, header=True).value
-        #print(df)
+# col1, col2 = st.columns(2)
+# df["Date"] = pd.to_datetime(df["Date"]).dt.date
+# with col1:
+#         start_date = st.date_input("Start date", value=df["Date"].min())
+# with col2:
+#         end_date = st.date_input("End date", value=df["Date"].max())
+# data = df.loc[df["Date"].between(start_date, end_date)]
 
-        #st.dataframe(df) 
-
-        # ----SIDEBAR-----
-# authenticator.logout("Logout", "sidebar")
-# st.sidebar.title(f"Welcome {name}")
-st.title(":dart: Dashboard")
-st.sidebar.title(":dart: My Dashboard")
-
-st.sidebar.header("Please Filter Here:")
-city = st.sidebar.multiselect(
-                "Select the City:",
-                options = df["City"].unique(),
-                default = df["City"].unique()
-                )
-
-customer_type = st.sidebar.multiselect(
-                "Select the Customer Type:",
-                options = df["Customer_type"].unique(),
-                default = df["Customer_type"].unique()
-                )
-
-gender = st.sidebar.multiselect(
-                "Select the Gender:",
-                options = df["Gender"].unique(),
-                default = df["Gender"].unique()
-                )   
-
-branch = st.sidebar.multiselect(
-                "Select the Branch:",
-                options = df["Branch"].unique(),
-                default = df["Branch"].unique()
-        )
-
-# product = st.sidebar.multiselect(
-#                 "Select the Product:",
-#                 options = df["Product_line"].unique(),
-#                 default = df["Product_line"].unique()
-#         )
-
-payment = st.sidebar.multiselect(
-                "Select the Payment:",
-                options = df["Payment"].unique(),
-                default = df["Payment"].unique()
-        )
-agree = st.sidebar.checkbox('I agree')
-
-if agree:
-    st.sidebar.write(':sunglasses::sunglasses::sunglasses:')
-
-df_selection = df.query(
-            "City == @city & Customer_type == @customer_type & Gender == @gender & Branch == @branch & Payment == @payment"
-        )
-
-
+df_selection = df
 # st.dataframe(df_selection)
 
-        #----- MAINPAGE -----
+# --------------------------------------------- MAINPAGE ----------------------------------------------------
 
 
-st.markdown("------------------------------------------------------------------------------")
+# st.markdown("------------------------------------------------------------------------------")
 
-        # TOP KPI'set
+#----------------------------------------------- TOP KPI'set-------------------------------------------------
 
-total_sales = int(df_selection["Total"].sum())
-average_rating = round(df_selection["Rating"].mean(), 1)
-star_rating = ":star:" * int(round(average_rating, 0))
-average_sale_by_transaction = round(df_selection["Total"].mean(), 2)
+total        = int(df_selection["Total"].sum())
+people_in  = int(df_selection["People_In"].sum())
+people_out = int(df_selection["People_Out"].sum())
+people_in_per =  people_in / total * 100
+format_people_in_per = ("{:.1f}".format(people_in_per))
+people_out_per = people_out / total * 100
+format_people_out_per = ("{:.1f}".format(people_out_per))
 
+
+
+with open('style1.css') as f:
+    st.markdown(f'<style>{f.read()}</style>', unsafe_allow_html=True)
+    
 left_column , middle_column, right_column = st.columns(3)
 with left_column:
-            st.subheader("Total Sales:")
-            st.subheader(f"US $ {total_sales:,}")
+            st.subheader("👩‍👩‍👦‍👦Total")
+            st.subheader(f"{total}")            
 with middle_column:
-            st.subheader("Average Rating:")
-            st.subheader(f"{average_rating} {star_rating}")
+            st.subheader(":two_men_holding_hands:People In")
+            st.subheader(f"{people_in} [{format_people_in_per}%]")
 with right_column:
-            st.subheader("Average Sales Per Transaction:")
-            st.subheader(f"US $ {average_sale_by_transaction}")
-            
-              
-            
-#------------------ SALES BY PRODUCT LINE [BAR CHART] ---------------
+            st.subheader(":two_men_holding_hands:People Out")
+            st.subheader(f"{people_out} [{format_people_out_per}%]")
+
+#----------------------------------- Date By People IN [BAR CHART] -------------------------------------------
+
 st.markdown("---------------------------------------------------------------------------")  
-sales_by_product_line = (
-            df_selection.groupby(by=["Product_line"]).sum()[["Total"]].sort_values(by="Total")
-            
-        )        
-fig_product_sales = px.bar(
-            sales_by_product_line,
-            x="Total",
-            y=sales_by_product_line.index,
-            orientation="h",
-            title="<b>Sales by Product Line</b>",
-            color_discrete_sequence = ["#0083b8"] * len(sales_by_product_line),
-            template="plotly_white",
+people_in_groupby = df_selection.groupby(df_selection['Date'].dt.strftime('%B'))['People_In'].sum().sort_index()
+  
+fig_people_in = px.line(
+            people_in_groupby,
+            x = people_in_groupby.index,
+            y = "People_In",
+            orientation = "v",
+            title = "<b>Month by People In</b>",
+            color_discrete_sequence = ["#12A999"] * len(people_in_groupby),
+            template = "plotly_white",
+            markers="**",
         )
-fig_product_sales.update_layout(
-            plot_bgcolor="rgba(0,0,0,0)",
-            xaxis=(dict(showgrid=False))
-        )
-        # st.plotly_chart(fig_product_sales)
-
-# ------------------- SALES BY HOUR [BAR CHART] ----------------
-
-sales_by_hour = df_selection.groupby(by=["hour"]).sum()[["Total"]]
-fig_hourly_sales = px.bar(
-            sales_by_hour,
-            x=sales_by_hour.index,
-            y="Total",
-            title="<b>Sales by hour</b>",
-            color_discrete_sequence=['#0083B8'] * len(sales_by_hour),
-            template="plotly_white",
-        )
-fig_hourly_sales.update_layout(
-            xaxis=dict(tickmode="linear"),
-            plot_bgcolor="rgba(0,0,0,0)",
-            yaxis=(dict(showgrid=False))
+fig_people_in.update_layout(
+            plot_bgcolor = "rgba(0,0,0,0)",
+            xaxis        = (dict(showgrid=False)),
+            yaxis        = (dict(showgrid=False))
         )
 
-        # st.plotly_chart(fig_hourly_sales)
         
+#----------------------------------- Date By People Out [BAR CHART] -------------------------------------------
 
 
-left_column, right_column = st.columns(2)
-left_column.plotly_chart(fig_hourly_sales, use_container_width=True)
-right_column.plotly_chart(fig_product_sales, use_container_width=True)
+   
+people_out_groupby = df_selection.groupby(df_selection['Date'].dt.strftime('%B'))['People_Out'].sum().sort_index()
+
+fig_people_out = px.bar(
+            people_out_groupby,
+            x = people_out_groupby.index,
+            y = "People_Out",
+            orientation = "v",
+            title = "<b>Month by People Out</b>",
+            color_discrete_sequence = ["#12A999"] * len(people_out_groupby),
+            template = "plotly_white",
+        )
+fig_people_out.update_layout(
+            plot_bgcolor = "rgba(0,0,0,0)",
+            xaxis        = (dict(showgrid=False)),
+            yaxis        = (dict(showgrid=False)),
+        
+        )
+
+         
+col1 , col2 = st.columns(2)
+with col1:
+        st.write(fig_people_in)
+with col2:
+        st.write(fig_people_out)
+st.markdown("---------------------------------------------------------------------------")   
+#----------------------------------- Date By Total [BAR CHART] -------------------------------------------
+
+
+total_groupby = df_selection.groupby(df_selection['Date'].dt.strftime('%B'))['Total'].sum().sort_index()
+
+fig_total = px.bar(
+            total_groupby,
+            x = total_groupby.index,
+            y = "Total",
+            orientation = "v",
+            title = "<b>Month by Total</b>",
+            color_discrete_sequence = ["#12A999"] * len(total_groupby),
+            template = "plotly_white",
+        )
+fig_total.update_layout(
+            plot_bgcolor = "rgba(0,0,0,0)",
+            xaxis        = (dict(showgrid=False)),
+            yaxis        = (dict(showgrid=False)),
+        
+        )
+st.write(fig_total)
+
 st.markdown("--------------------------------------------------------------------------------") 
-# --------- sales by branch [pie chart] ----------------
-
-sales_by_gender = pd.read_excel("supermarkt_sales.xlsx",
-                                usecols="C:K",
-                                )
-sales_by_gender.dropna(inplace=True)
-
-left_column, right_column = st.columns(2)
-with left_column:
-        pie_chart = px.pie(sales_by_gender,
-                        title="Sales by Gender",
-                        values="Total",
-                        names="Gender")
-        st.plotly_chart(pie_chart) 
-
-# --------------sales by customer type [pie chart]
-sales_by_customer_type = pd.read_excel("supermarkt_sales.xlsx",
-                                usecols="D:J",
-                                )
-sales_by_customer_type.dropna(inplace=True)
-
-with right_column:
-        pie_chart = px.pie(sales_by_customer_type,
-                        title="Sales by Customer Type",
-                        values="Total",
-                        names="Customer_type",
-                        )
-        st.plotly_chart(pie_chart)                               
 
         # --------HIDE STREAMLIT STYLE-------
 
-# hide_st_style = """
-#                     <style>
-#                     #MainMenu {visibility: hidden;}
-#                     footer {visibility: hidden;}
-#                     header {visiblity: hidden:}
-#                     </style>
-#                     """
-# st.markdown(hide_st_style, unsafe_allow_html=True)
+hide_st_style = """
+                    <style>
+                    #MainMenu {visibility: hidden;}
+                    footer {visibility: hidden;}
+                    header {visiblity: hidden:}
+                    </style>
+                    """
+st.markdown(hide_st_style, unsafe_allow_html=True)
+
+# year_option = df["Date"].tolist()
+# year = st.selectbox("choose it?", year_option, 0)
+# data = df[df["Date"]==year]
+
+# fig = px.scatter(data, y="Total", x="Product_line",color_discrete_sequence=['#0BFCE2'])
+# fig.update_layout(width=1000, height=800, plot_bgcolor="rgba(0,0,0,0)", xaxis=dict(showgrid=False), yaxis=dict(showgrid=False))
+# st.write(fig)
+st.title("📋Report")
+# start_date = st.date_input("Fron Date", value = df["Date"].min())
+# end_date   = st.date_input("End Date", value = df["Date"].max())
+# filtered_data = df.loc[(df["Date"] >= start_date) & (df["Date"] <= end_date)]
+# period = st.selectbox("Select Period:", get_all_periods())
+AgGrid(df)
+
